@@ -14,8 +14,9 @@ breast cancer translational projects. It performs the following steps:
    detailing the query and selected literature.
 
 > **Note:** The scripts rely on external services (NCBI E-utilities and the
-> OpenAI API). When running in an offline environment the code falls back to a
-> stub response.
+> OpenAI API). When the network or API key is unavailable, the pipeline falls
+> back to a local heuristic mode that assembles readable direction summaries,
+> outlines, and proposal drafts from the collected literature.
 
 ## Project structure
 

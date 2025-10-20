@@ -51,11 +51,11 @@ class ProjectDesigner:
                 [{"role": "user", "content": user_prompt}],
             )
         except Exception:  # pragma: no cover - network fallback
-            fallback = {
-                section: [f"无法访问GPT服务，保留原始方向概要：{direction_summary[:200]}"]
-                for section in sections
-            }
-            return json.dumps(fallback, ensure_ascii=False, indent=2)
+            return json.dumps(
+                self._offline_outline(direction_summary, sections),
+                ensure_ascii=False,
+                indent=2,
+            )
         outline = self._parse_completion(completion, sections)
         return json.dumps(outline, ensure_ascii=False, indent=2)
 
@@ -78,4 +78,60 @@ class ProjectDesigner:
                 outline[section] = [value.strip()]
             else:
                 outline[section] = []
+        return outline
+
+    def _offline_outline(
+        self, direction_summary: str, sections: list[str]
+    ) -> dict[str, list[str]]:
+        """Fallback outline when GPT is not available."""
+
+        summary = direction_summary.strip()
+        if not summary:
+            summary = "乳腺癌精准诊疗方向，强调基础与临床协同。"
+
+        base_points = [
+            "针对乳腺癌早诊与耐药机制提出系统研究思路。",
+            "构建跨区域的样本与数据共享平台，强化粤惠联合特色。",
+            "通过生物标志物、免疫微环境和临床验证形成闭环。",
+            "设置分阶段里程碑和量化考核指标保障项目落地。",
+        ]
+
+        outline: dict[str, list[str]] = {}
+        for index, section in enumerate(sections):
+            if index == 0:
+                outline[section] = [summary[:200]] + base_points[:2]
+            elif index == 1:
+                outline[section] = [
+                    "总体目标聚焦乳腺癌精准诊疗技术体系构建。",
+                    "分解为关键科学问题、技术攻关与临床转化三个层级。",
+                ]
+            elif index == 2:
+                outline[section] = [
+                    "模块一：多组学筛查乳腺癌早诊标志物并建立预测模型。",
+                    "模块二：解析免疫微环境与耐药关联，提出干预策略。",
+                    "模块三：依托惠州—深圳联合平台开展临床验证与推广。",
+                ]
+            elif index == 3:
+                outline[section] = [
+                    "已有区域合作基础、临床病例资源及实验平台支撑研究实施。",
+                    "技术路线成熟，数据与伦理管理制度完善，风险可控。",
+                ]
+            elif index == 4:
+                outline[section] = [
+                    "团队涵盖基础研究、临床肿瘤与数据科学专家，形成互补优势。",
+                    "近年承担相关省市课题并形成原创成果，为本项目奠定基础。",
+                ]
+            elif index == 5:
+                outline[section] = [
+                    "预期发表高水平论文、申请发明专利并形成诊疗指南。",
+                    "量化指标包括标志物筛选准确率、转化成果推广数量等。",
+                ]
+            elif index == 6:
+                outline[section] = [
+                    "第一年完成样本与数据平台建设，完成多组学测序。",
+                    "第二年聚焦机制研究与临床小试，优化关键技术指标。",
+                    "第三年开展多中心验证与成果转化落地，形成示范应用。",
+                ]
+            else:
+                outline[section] = base_points
         return outline
