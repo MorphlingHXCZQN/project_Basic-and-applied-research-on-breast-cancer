@@ -6,6 +6,8 @@ import datetime as _dt
 import logging
 from typing import Iterable
 
+import xml.etree.ElementTree as ET
+
 import requests
 
 LOGGER = logging.getLogger(__name__)
@@ -80,6 +82,57 @@ def fetch_summaries(
     return [summaries[pmid] for pmid in pmid_list if pmid in summaries]
 
 
+def fetch_details(
+    pmids: Iterable[str], *, email: str | None = None, api_key: str | None = None
+) -> dict[str, dict]:
+    """Retrieve detailed article metadata including abstracts and MeSH terms."""
+
+    pmid_list = list(pmids)
+    if not pmid_list:
+        return {}
+
+    params = {
+        "db": "pubmed",
+        "retmode": "xml",
+        "id": ",".join(pmid_list),
+    }
+    if email:
+        params["email"] = email
+    if api_key:
+        params["api_key"] = api_key
+
+    LOGGER.info("Fetching detailed records for %d PubMed IDs", len(pmid_list))
+    response = requests.get(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi", params=params, timeout=30
+    )
+    response.raise_for_status()
+    details: dict[str, dict] = {}
+    root = ET.fromstring(response.text)
+    for article in root.findall(".//PubmedArticle"):
+        pmid = article.findtext(".//PMID")
+        if not pmid:
+            continue
+        abstract_text = " ".join(
+            (section.text or "").strip() for section in article.findall(".//Abstract/AbstractText")
+        ).strip()
+        mesh_terms = [
+            descriptor.text.strip()
+            for descriptor in article.findall(".//MeshHeading/DescriptorName")
+            if descriptor.text
+        ]
+        publication_types = [
+            pub_type.text.strip()
+            for pub_type in article.findall(".//PublicationType")
+            if pub_type.text
+        ]
+        details[pmid] = {
+            "abstract": abstract_text,
+            "mesh_terms": mesh_terms,
+            "publication_types": publication_types,
+        }
+    return details
+
+
 APPLICATION_KEYWORDS = {
     "translational",
     "clinical",
@@ -106,14 +159,16 @@ def filter_applied_research(articles: Iterable[dict]) -> list[dict]:
     return filtered
 
 
-def summarize_articles(articles: Iterable[dict]) -> list[dict]:
+def summarize_articles(articles: Iterable[dict], details: dict[str, dict] | None = None) -> list[dict]:
     """Normalize article payloads to a consistent structure."""
 
     normalized: list[dict] = []
     for article in articles:
+        pmid = article.get("uid", "")
+        detail = (details or {}).get(pmid, {})
         normalized.append(
             {
-                "pmid": article.get("uid", ""),
+                "pmid": pmid,
                 "title": article.get("title", ""),
                 "authors": [
                     f"{author.get('name')}" for author in article.get("authors", []) if author.get("name")
@@ -121,8 +176,12 @@ def summarize_articles(articles: Iterable[dict]) -> list[dict]:
                 "pubdate": article.get("pubdate", ""),
                 "journal": article.get("fulljournalname", ""),
                 "summary": article.get("elocationid", ""),
+                "abstract": detail.get("abstract", ""),
                 "url": f"https://pubmed.ncbi.nlm.nih.gov/{article.get('uid', '')}/",
-                "keywords": article.get("keywords", []),
+                "keywords": article.get("keywords", []) or detail.get("mesh_terms", []),
+                "mesh_terms": detail.get("mesh_terms", []),
+                "publication_types": detail.get("publication_types", []),
+                "cited_by": article.get("citedbycount", 0),
             }
         )
     return normalized

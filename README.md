@@ -22,6 +22,7 @@ breast cancer translational projects. It performs the following steps:
 ```
 src/
 ├── config.py              # Dataclass storing pipeline configuration
+├── article_ranker.py      # Heuristic scoring of PubMed articles
 ├── gpt_client.py          # Thin wrapper around the OpenAI ChatCompletion API
 ├── github_uploader.py     # Optional helpers to push outputs to GitHub
 ├── pipeline.py            # Orchestrates the end-to-end workflow
@@ -48,6 +49,15 @@ Set the following environment variables before executing the pipeline:
 ## Running the pipeline
 
 默认检索词为“breast cancer”，会自动与转化/应用相关关键词组合进行筛选；如需自定义请使用 `--query` 选项覆盖。
+
+流水线会对检索到的文献计算综合评分，指标包括：
+
+- 与“转化/应用”相关关键词的覆盖度；
+- 与输入项目背景文本的语义重合度（基于关键词匹配）；
+- 发表的时间（越新越好）；
+- 引用次数（对数缩放）。
+
+可以在 `PipelineConfig` 中调整 `keyword_weight`、`background_weight`、`recency_weight`、`citation_weight` 和 `top_article_count` 等参数，以定制评分策略和传递给 GPT 的文献数量。
 
 ```bash
 python -m src.pipeline "<项目背景文本>" \

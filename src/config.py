@@ -23,6 +23,23 @@ class PipelineConfig:
     openai_model: str = "gpt-4o"
     openai_temperature: float = 0.5
     proposal_word_count: int = 5000
+    top_article_count: int = 15
+    keyword_weight: float = 0.3
+    background_weight: float = 0.3
+    citation_weight: float = 0.2
+    recency_weight: float = 0.2
+    keyword_focus: tuple[str, ...] = (
+        "转化",
+        "应用",
+        "临床",
+        "诊断",
+        "治疗",
+        "靶点",
+        "生物标志物",
+        "精准",
+        "干预",
+        "成像",
+    )
     github_owner: str | None = None
     github_repo: str | None = None
     github_branch: str = "main"

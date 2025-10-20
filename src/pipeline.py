@@ -7,12 +7,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from .article_ranker import ArticleRanker
 from .config import DEFAULT_OUTPUT_DIR, PipelineConfig
 from .github_uploader import GitHubAsset, upload_assets
 from .gpt_client import GPTClient
 from .project_designer import ProjectDesigner
 from .proposal_writer import ProposalWriter
 from .pubmed_scraper import (
+    fetch_details,
     fetch_summaries,
     filter_applied_research,
     search_pubmed,
@@ -28,6 +30,7 @@ class Pipeline:
         self._config = config
         self._gpt = GPTClient(model=config.openai_model, temperature=config.openai_temperature)
         self._designer = ProjectDesigner(self._gpt)
+        self._ranker = ArticleRanker(config)
         self._writer = ProposalWriter(self._gpt)
 
     def _build_query(self) -> str:
@@ -49,7 +52,12 @@ class Pipeline:
             api_key=self._config.api_key,
         )
         summaries = fetch_summaries(pmids, email=self._config.email, api_key=self._config.api_key)
-        normalized = summarize_articles(summaries)
+        try:
+            details = fetch_details(pmids, email=self._config.email, api_key=self._config.api_key)
+        except Exception as error:  # pragma: no cover - network fallback
+            LOGGER.warning("Failed to fetch article details: %s", error)
+            details = {}
+        normalized = summarize_articles(summaries, details)
         filtered = filter_applied_research(normalized)
         LOGGER.info("Retrieved %d applied research articles", len(filtered))
         return filtered
@@ -68,12 +76,15 @@ class Pipeline:
     def run(self, background: str) -> dict[str, Any]:
         output_dir = self._config.ensure_output_dir()
         articles = self.gather_articles()
-        direction_summary = self.design_project(articles, background)
+        ranked_articles = self._ranker.rank(articles, background)
+        top_articles = ranked_articles[: self._config.top_article_count]
+        direction_summary = self.design_project(top_articles, background)
         outline = self.produce_outline(direction_summary)
         proposal_path = self.write_proposal(outline, output_dir)
         payload = {
             "query": self._build_query(),
-            "articles": articles,
+            "articles": ranked_articles,
+            "top_articles": top_articles,
             "direction_summary": direction_summary,
             "outline": json.loads(outline),
             "proposal_path": str(proposal_path),

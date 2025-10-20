@@ -64,15 +64,18 @@ class GPTClient:
             "You are a biomedical researcher specializing in breast cancer. "
             "Synthesize insights from the provided PubMed summaries to propose a translational research direction."
         )
+        ranked_articles = list(articles)
+        content = (
+            "背景信息：\n"
+            f"{background}\n\n"
+            "以下是根据关键词契合度、研究背景匹配度、近发表时间和引用情况综合评分的前沿文献，请优先结合得分靠前的研究：\n"
+            f"{json.dumps(ranked_articles, ensure_ascii=False, indent=2)}\n\n"
+            "请总结共同趋势，提出一个聚焦于临床转化或基础应用的研究方向，阐明创新点、临床需求以及关键科学问题。"
+        )
         messages = [
             {
                 "role": "user",
-                "content": (
-                    "Background context:\n"
-                    f"{background}\n\n"
-                    "Articles:\n"
-                    f"{json.dumps(list(articles), ensure_ascii=False, indent=2)}"
-                ),
+                "content": content,
             }
         ]
         try:
