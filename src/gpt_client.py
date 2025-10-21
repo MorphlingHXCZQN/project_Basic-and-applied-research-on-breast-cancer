@@ -24,6 +24,8 @@ class GPTClient:
     model: str = "gpt-4o"
     temperature: float = 0.5
     _client: "OpenAI | None" = field(init=False, default=None, repr=False)
+    _offline_engaged: bool = field(init=False, default=False, repr=False)
+    _offline_notes: list[str] = field(init=False, default_factory=list, repr=False)
 
     def _requires_openai(self) -> None:
         if OpenAI is None:
@@ -56,6 +58,11 @@ class GPTClient:
         """Legacy stub kept for backward compatibility."""
 
         LOGGER.warning("Using offline stub for prompt: %.120s", prompt)
+        self._record_offline_event(
+            "offline_stub",
+            "调用 legacy offline stub 响应请求，建议检查 OpenAI 配置。",
+            None,
+        )
         return (
             "当前环境无法连接至 OpenAI 服务，请检查网络或 API 配置。"
             " 为保证流程不中断，系统已自动切换至本地启发式策略。"
@@ -86,6 +93,11 @@ class GPTClient:
             return self.chat_completion(system_prompt, messages)
         except Exception as exc:  # pragma: no cover - network fallback
             LOGGER.error("Falling back to offline summary: %s", exc)
+            self._record_offline_event(
+                "summarize_articles",
+                "OpenAI API unavailable while生成研究方向，已启用本地启发式总结。",
+                exc,
+            )
             return self._offline_direction_summary(ranked_articles, background)
 
     def draft_proposal(self, outline: str, word_count: int) -> str:
@@ -110,10 +122,34 @@ class GPTClient:
             return self.chat_completion(system_prompt, messages)
         except Exception as exc:  # pragma: no cover - network fallback
             LOGGER.error("Falling back to offline proposal: %s", exc)
+            self._record_offline_event(
+                "draft_proposal",
+                "OpenAI API unavailable while生成项目书，已启用本地长文档模板。",
+                exc,
+            )
             return self._offline_proposal_text(outline, word_count)
+
+    def offline_engaged(self) -> bool:
+        """Return True if any request had to use the offline heuristics."""
+
+        return self._offline_engaged
+
+    def offline_notes(self) -> list[str]:
+        """Return notes describing offline fallback reasons."""
+
+        return list(self._offline_notes)
 
     # ------------------------------------------------------------------
     # Offline helpers
+
+    def _record_offline_event(self, action: str, note: str, error: Exception | None) -> None:
+        """Track that offline mode was triggered and record human-readable notes."""
+
+        self._offline_engaged = True
+        details = note
+        if error:
+            details = f"{note} 错误信息: {error}"
+        self._offline_notes.append(f"[{action}] {details}")
 
     def _offline_direction_summary(
         self, articles: Iterable[dict], background: str
