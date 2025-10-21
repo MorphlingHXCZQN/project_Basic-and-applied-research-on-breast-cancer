@@ -16,7 +16,9 @@ breast cancer translational projects. It performs the following steps:
 > **Note:** The scripts rely on external services (NCBI E-utilities and the
 > OpenAI API). When the network or API key is unavailable, the pipeline falls
 > back to a local heuristic mode that assembles readable direction summaries,
-> outlines, and proposal drafts from the collected literature.
+> outlines, and proposal drafts from the collected literature. 如果 PubMed 检索
+> 完全失败，系统会自动启用 `offline_articles.py` 中预置的近五年高被引乳腺癌转化
+> 研究文献集合，确保流程仍能顺利产出方向建议和项目书草稿。
 
 ## Project structure
 
@@ -25,6 +27,7 @@ src/
 ├── config.py              # Dataclass storing pipeline configuration
 ├── article_ranker.py      # Heuristic scoring of PubMed articles
 ├── gpt_client.py          # Thin wrapper around the OpenAI ChatCompletion API
+├── offline_articles.py    # Curated offline dataset when PubMed is unreachable
 ├── github_uploader.py     # Optional helpers to push outputs to GitHub
 ├── pipeline.py            # Orchestrates the end-to-end workflow
 ├── project_designer.py    # Derives project directions and outlines

@@ -139,6 +139,11 @@ class GPTClient:
 
         return list(self._offline_notes)
 
+    def add_offline_note(self, action: str, note: str) -> None:
+        """Expose a public helper for other components to record offline events."""
+
+        self._record_offline_event(action, note, None)
+
     # ------------------------------------------------------------------
     # Offline helpers
 

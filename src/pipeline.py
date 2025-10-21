@@ -21,6 +21,7 @@ from .pubmed_scraper import (
     search_pubmed,
     summarize_articles,
 )
+from .offline_articles import OFFLINE_ARTICLES
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class Pipeline:
         self._designer = ProjectDesigner(self._gpt)
         self._ranker = ArticleRanker(config)
         self._writer = ProposalWriter(self._gpt)
+        self._data_source = "pubmed"
 
     def _build_query(self) -> str:
         base_query = self._config.query
@@ -45,23 +47,32 @@ class Pipeline:
 
     def gather_articles(self) -> list[dict[str, Any]]:
         query = self._build_query()
-        pmids = search_pubmed(
-            query,
-            years=self._config.years,
-            retmax=self._config.retmax,
-            email=self._config.email,
-            api_key=self._config.api_key,
-        )
-        summaries = fetch_summaries(pmids, email=self._config.email, api_key=self._config.api_key)
         try:
-            details = fetch_details(pmids, email=self._config.email, api_key=self._config.api_key)
+            pmids = search_pubmed(
+                query,
+                years=self._config.years,
+                retmax=self._config.retmax,
+                email=self._config.email,
+                api_key=self._config.api_key,
+            )
+            summaries = fetch_summaries(
+                pmids, email=self._config.email, api_key=self._config.api_key
+            )
+            try:
+                details = fetch_details(
+                    pmids, email=self._config.email, api_key=self._config.api_key
+                )
+            except Exception as error:  # pragma: no cover - network fallback
+                LOGGER.warning("Failed to fetch article details: %s", error)
+                details = {}
+            normalized = summarize_articles(summaries, details)
+            filtered = filter_applied_research(normalized)
+            LOGGER.info("Retrieved %d applied research articles", len(filtered))
+            self._data_source = "pubmed"
+            return filtered
         except Exception as error:  # pragma: no cover - network fallback
-            LOGGER.warning("Failed to fetch article details: %s", error)
-            details = {}
-        normalized = summarize_articles(summaries, details)
-        filtered = filter_applied_research(normalized)
-        LOGGER.info("Retrieved %d applied research articles", len(filtered))
-        return filtered
+            LOGGER.error("PubMed retrieval failed, using offline cache: %s", error)
+            return self._load_offline_articles(error)
 
     def design_project(self, articles: list[dict[str, Any]], background: str) -> str:
         return self._designer.design_direction(articles, background)
@@ -94,6 +105,7 @@ class Pipeline:
             "direction_summary": direction_summary,
             "outline": outline_data,
             "proposal_path": str(proposal_path),
+            "data_source": self._data_source,
         }
         metadata_path = output_dir / "pipeline_result.json"
         metadata_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -129,6 +141,20 @@ class Pipeline:
                 ],
             )
         return payload
+
+    def _load_offline_articles(self, error: Exception) -> list[dict[str, Any]]:
+        """Return the built-in offline article cache when PubMed is unreachable."""
+
+        self._data_source = "offline_cache"
+        note = (
+            "PubMed 检索失败，已启用内置的乳腺癌转化研究文献缓存。"
+            f" 错误信息: {error}"
+        )
+        self._gpt.add_offline_note("pubmed_offline", note)
+        LOGGER.warning(
+            "Using offline article cache with %d entries", len(OFFLINE_ARTICLES)
+        )
+        return [dict(article) for article in OFFLINE_ARTICLES]
 
     def _emit_manual_prompt(
         self,
