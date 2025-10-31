@@ -806,6 +806,23 @@ class CAFATrainer:
         set_seed(self.config.seed)
         features, labels, ids, source_tag = self._prepare_features()
         features, labels, ids = self._deduplicate(features, labels, ids)
+        if len(features) == 0:
+            train_dir = self.config.data.train_dir
+            available = ", ".join(_list_files(train_dir)) or "<empty>"
+            raise ValueError(
+                "No training samples were loaded. "
+                "Ensure the CAFA-6 competition data is present at "
+                f"'{train_dir}'. Currently visible files: {available}"
+            )
+
+        if len(features) < self.config.trainer.folds:
+            raise ValueError(
+                "The requested number of folds exceeds the number of available "
+                "training samples. Reduce `trainer.folds` (currently "
+                f"{self.config.trainer.folds}) or make sure the dataset is "
+                "mounted correctly."
+            )
+
         test_features, test_ids = self._prepare_test_features(source_tag)
 
         folds = list(multilabel_stratified_split(labels, self.config.trainer.folds, self.config.seed))
